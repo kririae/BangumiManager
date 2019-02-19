@@ -1,3 +1,5 @@
+# by kririae
+# 2019/02/19
 import os
 import sqlite3
 import requests
@@ -20,13 +22,21 @@ def is_login(func):
   return wrapper
 
 
+def type_check(func):
+  @wraps(func)
+  def wrapper(self, *args, **kwargs):
+    # TODO...
+    return func(self, *args, **kwargs)
+  return wrapper
+
+
 class BangumiSession:
 
   _DOMAINS = ('https://bangumi.tv', 'https://bgm.tv', 'https://chii.in')
   _SUPPORT_BROWSER = ('chrome', 'firefox')
   _API_URL = "https://api.bgm.tv"
 
-  def __init__(self, login=True, url='bgm.tv', browser_type='chrome'):
+  def __init__(self, login: bool = True, url: str = 'bgm.tv', browser_type: str = 'chrome'):
     self._url = 'https://' + self._convert_url(url)
     self._browser_type = browser_type
     self._cookies = self._get_cookies()
@@ -39,7 +49,7 @@ class BangumiSession:
     # print(self._url in DOMAINS)
     if not self._url in self._DOMAINS:
       raise BaseException(
-        "Url must be one of ('http://bangumi.tv', 'http://bgm.tv', 'http://chii.in')")
+        "Url must be one of ('https://bangumi.tv', 'https://bgm.tv', 'https://chii.in')")
     if not browser_type in self._SUPPORT_BROWSER:
       raise BaseException(
         "Type must be one of ('chrome', 'firefox')")
@@ -51,7 +61,7 @@ class BangumiSession:
       self._gh = self._get_gh()
     # print("init finished")
 
-  def _get_game_information(self, id: str):
+  def _get_subject_information(self, id: str):
     ret = requests.get(f'{self._API_URL}/subject/{str(id)}')
     if ret.status_code != 200:
       raise BaseException("HTTP error. Failed to get game information")
@@ -63,12 +73,16 @@ class BangumiSession:
       raise BaseException("HTTP error. Failed to get user information")
     return json.loads(ret.text)
 
-  def _change_rate_of_game(self, id: [str, int], rate: int):
-    data = { "rate": rate }
+  def _update_completion_degree(self, id: str, rate: str):
+    data = {"referer": "subject", "submit": "更新", "watchedeps": rate}
+    return self._post(f'{self._url}/subject/set/watched/{str(id)}', data=data)
+
+  def _change_rate_of_subject(self, id: str, rate: int):
+    data = {"rate": rate}
     return self._post(
       f'{self._url}/subject/{str(id)}/rate.chii?gh={str(self._gh)}', data=data)
 
-  def _want_playing_game(self, id: int, tags: list = [], comment: str = ""):
+  def _want_subject(self, id: int, tags: list = [], comment: str = ""):
     data = {
       "referer": "subject",
       "interest": 1,
@@ -79,7 +93,7 @@ class BangumiSession:
     return self._post(
       f'{self._url}/subject/{str(id)}/interest/update?gh={self._gh}', data=data)
 
-  def _played_game(self, id: int, rating: int, tags: list = [], comment: str = ""):
+  def _finished_subject(self, id: int, rating: int, tags: list = [], comment: str = ""):
     data = {
       "referer": "subject",
       "rating": rating,
@@ -91,7 +105,7 @@ class BangumiSession:
     return self._post(
       f'{self._url}/subject/{str(id)}/interest/update?gh={self._gh}', data=data)
 
-  def _playing_game(self, id: int, rating: int, tags: list = [], comment: str = "", ):
+  def _doing_subject(self, id: int, rating: int, tags: list = [], comment: str = "", ):
     data = {
       "referer": "subject",
       "rating": rating,
@@ -103,7 +117,7 @@ class BangumiSession:
     return self._post(
       f'{self._url}/subject/{str(id)}/interest/update?gh={self._gh}', data=data)
 
-  def _pause_playing_game(self, id: int, rating: int, tags: list = [], comment: str = ""):
+  def _pause_subject(self, id: int, rating: int, tags: list = [], comment: str = ""):
     data = {
       "referer": "subject",
       "rating": rating,
@@ -115,7 +129,7 @@ class BangumiSession:
     return self._post(
       f'{self._url}/subject/{str(id)}/interest/update?gh={self._gh}', data=data)
 
-  def _stop_playing_game(self, id: int, rating: int, tags: list = [], comment: str = ""):
+  def _stop_subject(self, id: int, rating: int, tags: list = [], comment: str = ""):
     data = {
       "referer": "subject",
       "rating": rating,
@@ -136,7 +150,7 @@ class BangumiSession:
       s = s[:-1]
     return s
 
-  def _get_cookies(self) -> 'dict':
+  def _get_cookies(self) -> dict:
     # Get cookie information from chrome
     username = os.environ.get('USERNAME')
     if self._browser_type == 'chrome':
@@ -162,24 +176,24 @@ class BangumiSession:
         cookies = {}
         for name, value in res:
           cookies[name] = value
-        print(cookies)
+        # print(cookies)
         return cookies
         # 不知道火狐浏览器把会话级cookie存哪去了...这段先咕咕咕吧
 
-  def _find_cookies_path_in_firefox(self, path: 'str', name: 'str') -> 'str':
+  def _find_cookies_path_in_firefox(self, path: str, name: str) -> str:
     for root, dirs, files in os.walk(path):
       if name in files:
         return os.path.join(str(root), str(name))
     return -1
 
-  def _get_name_from_html(self, text: 'str') -> '(str, str)':
+  def _get_name_from_html(self, text: str) -> (str, str):
     soup = BeautifulSoup(text, 'html.parser')
     node = soup.find_all('a', href=re.compile(r'/user/\w+'), class_="l")
     if len(node) == 0:
       raise BaseException("Html parse error.")
     return node[0].get('href').split('/')[-1], node[0].get_text()
 
-  def _get_gh_from_html(self, text: 'str') -> 'str':
+  def _get_gh_from_html(self, text: str) -> str:
     soup = BeautifulSoup(text, 'html.parser')
     node = soup.find_all('a', href=re.compile(f'{self._url}/logout/\d+'))
     if len(node) == 0:
@@ -196,11 +210,11 @@ class BangumiSession:
     return self._cookies.get('chii_auth') != None
 
   @is_login
-  def _post(self, url: 'str', data: 'list'):
+  def _post(self, url: str, data: list):
     return self._session.post(url, data)
 
   @is_login
-  def _get(self, url: 'str'):
+  def _get(self, url: str):
     ret = self._session.get(url)
     ret.encoding = 'utf-8'
     return ret
@@ -209,7 +223,7 @@ class BangumiSession:
 def main():
   b = BangumiSession()
   # b._change_rate_of_game(121971, 8)
-  print(b._get_user_information("kriaeth"))
+  # b._update_completion_degree(175404, 2)
 
 
 if __name__ == '__main__':
